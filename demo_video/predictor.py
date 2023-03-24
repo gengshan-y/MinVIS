@@ -62,7 +62,7 @@ class VisualizationDemo(object):
             visualizer = TrackVisualizer(frame, self.metadata, instance_mode=self.instance_mode)
             ins = Instances(image_size)
             if len(pred_scores) > 0:
-                ins.scores = pred_scores
+                ins.scores = pred_scores[frame_idx]
                 ins.pred_classes = pred_labels
                 ins.pred_masks = torch.stack(frame_masks[frame_idx], dim=0)
 

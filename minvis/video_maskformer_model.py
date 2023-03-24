@@ -224,7 +224,7 @@ class VideoMaskFormer_frame(nn.Module):
             mask_cls_results = outputs["pred_logits"]
             mask_pred_results = outputs["pred_masks"]
 
-            mask_cls_result = mask_cls_results[0]
+            mask_cls_result = mask_cls_results
             mask_pred_result = mask_pred_results[0]
             first_resize_size = (images.tensor.shape[-2], images.tensor.shape[-1])
 
@@ -305,10 +305,11 @@ class VideoMaskFormer_frame(nn.Module):
             out_masks.append(pred_masks[i][indices, :, :])
             out_embds.append(pred_embds[i][indices, :])
 
-        out_logits = sum(out_logits)/len(out_logits)
-        out_masks = torch.stack(out_masks, dim=1)  # q h w -> q t h w
+        #out_logits = sum(out_logits)/len(out_logits)
+        #out_logits = out_logits.unsqueeze(0)
+        out_logits = torch.stack(out_logits, 0)
 
-        out_logits = out_logits.unsqueeze(0)
+        out_masks = torch.stack(out_masks, dim=1)  # q h w -> q t h w
         out_masks = out_masks.unsqueeze(0)
 
         outputs['pred_logits'] = out_logits
@@ -370,11 +371,16 @@ class VideoMaskFormer_frame(nn.Module):
 
     def inference_video(self, pred_cls, pred_masks, img_size, output_height, output_width, first_resize_size):
         if len(pred_cls) > 0:
-            scores = F.softmax(pred_cls, dim=-1)[:, :-1]
+            scores = F.softmax(pred_cls.mean(0), dim=-1)[:, :-1]
+            pred_cls = F.softmax(pred_cls, dim=-1)[...,:-1]
             labels = torch.arange(self.sem_seg_head.num_classes, device=self.device).unsqueeze(0).repeat(self.num_queries, 1).flatten(0, 1)
-            # keep top-10 predictions
-            scores_per_image, topk_indices = scores.flatten(0, 1).topk(10, sorted=False)
+            # keep top-1 predictions
+            scores_per_image, topk_indices = scores.flatten(0, 1).topk(1, sorted=False)
+            ## keep top-10 predictions
+            #scores_per_image, topk_indices = scores.flatten(0, 1).topk(10, sorted=False)
             labels_per_image = labels[topk_indices]
+            scores_per_image = pred_cls.reshape(len(pred_cls),-1)[:,topk_indices]
+
             topk_indices = topk_indices // self.sem_seg_head.num_classes
             pred_masks = pred_masks[topk_indices]
 
