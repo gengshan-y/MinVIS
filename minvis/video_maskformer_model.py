@@ -92,7 +92,9 @@ class VideoMaskFormer_frame(nn.Module):
             size_divisibility = self.backbone.size_divisibility
         self.size_divisibility = size_divisibility
         self.sem_seg_postprocess_before_inference = sem_seg_postprocess_before_inference
-        self.register_buffer("pixel_mean", torch.Tensor(pixel_mean).view(-1, 1, 1), False)
+        self.register_buffer(
+            "pixel_mean", torch.Tensor(pixel_mean).view(-1, 1, 1), False
+        )
         self.register_buffer("pixel_std", torch.Tensor(pixel_std).view(-1, 1, 1), False)
 
         self.num_frames = num_frames
@@ -120,7 +122,11 @@ class VideoMaskFormer_frame(nn.Module):
             num_points=cfg.MODEL.MASK_FORMER.TRAIN_NUM_POINTS,
         )
 
-        weight_dict = {"loss_ce": class_weight, "loss_mask": mask_weight, "loss_dice": dice_weight}
+        weight_dict = {
+            "loss_ce": class_weight,
+            "loss_mask": mask_weight,
+            "loss_dice": dice_weight,
+        }
 
         if deep_supervision:
             dec_layers = cfg.MODEL.MASK_FORMER.DEC_LAYERS
@@ -156,7 +162,7 @@ class VideoMaskFormer_frame(nn.Module):
             "pixel_std": cfg.MODEL.PIXEL_STD,
             # video
             "num_frames": cfg.INPUT.SAMPLING_FRAME_NUM,
-            "window_inference": cfg.MODEL.MASK_FORMER.TEST.WINDOW_INFERENCE
+            "window_inference": cfg.MODEL.MASK_FORMER.TEST.WINDOW_INFERENCE,
         }
 
     @property
@@ -229,23 +235,39 @@ class VideoMaskFormer_frame(nn.Module):
             first_resize_size = (images.tensor.shape[-2], images.tensor.shape[-1])
 
             input_per_image = batched_inputs[0]
-            image_size = images.image_sizes[0]  # image size without padding after data augmentation
+            image_size = images.image_sizes[
+                0
+            ]  # image size without padding after data augmentation
 
-            height = input_per_image.get("height", image_size[0])  # raw image size before data augmentation
+            height = input_per_image.get(
+                "height", image_size[0]
+            )  # raw image size before data augmentation
             width = input_per_image.get("width", image_size[1])
 
-            return retry_if_cuda_oom(self.inference_video)(mask_cls_result, mask_pred_result, image_size, height, width, first_resize_size)
+            return retry_if_cuda_oom(self.inference_video)(
+                mask_cls_result,
+                mask_pred_result,
+                image_size,
+                height,
+                width,
+                first_resize_size,
+            )
 
     def frame_decoder_loss_reshape(self, outputs, targets):
-        outputs['pred_masks'] = einops.rearrange(outputs['pred_masks'], 'b q t h w -> (b t) q () h w')
-        outputs['pred_logits'] = einops.rearrange(outputs['pred_logits'], 'b t q c -> (b t) q c')
-        if 'aux_outputs' in outputs:
-            for i in range(len(outputs['aux_outputs'])):
-                outputs['aux_outputs'][i]['pred_masks'] = einops.rearrange(
-                    outputs['aux_outputs'][i]['pred_masks'], 'b q t h w -> (b t) q () h w'
+        outputs["pred_masks"] = einops.rearrange(
+            outputs["pred_masks"], "b q t h w -> (b t) q () h w"
+        )
+        outputs["pred_logits"] = einops.rearrange(
+            outputs["pred_logits"], "b t q c -> (b t) q c"
+        )
+        if "aux_outputs" in outputs:
+            for i in range(len(outputs["aux_outputs"])):
+                outputs["aux_outputs"][i]["pred_masks"] = einops.rearrange(
+                    outputs["aux_outputs"][i]["pred_masks"],
+                    "b q t h w -> (b t) q () h w",
                 )
-                outputs['aux_outputs'][i]['pred_logits'] = einops.rearrange(
-                    outputs['aux_outputs'][i]['pred_logits'], 'b t q c -> (b t) q c'
+                outputs["aux_outputs"][i]["pred_logits"] = einops.rearrange(
+                    outputs["aux_outputs"][i]["pred_logits"], "b t q c -> (b t) q c"
                 )
 
         gt_instances = []
@@ -253,11 +275,11 @@ class VideoMaskFormer_frame(nn.Module):
             # labels: N (num instances)
             # ids: N, num_labeled_frames
             # masks: N, num_labeled_frames, H, W
-            num_labeled_frames = targets_per_video['ids'].shape[1]
+            num_labeled_frames = targets_per_video["ids"].shape[1]
             for f in range(num_labeled_frames):
-                labels = targets_per_video['labels']
-                ids = targets_per_video['ids'][:, [f]]
-                masks = targets_per_video['masks'][:, [f], :, :]
+                labels = targets_per_video["labels"]
+                ids = targets_per_video["ids"][:, [f]]
+                masks = targets_per_video["masks"][:, [f], :, :]
                 gt_instances.append({"labels": labels, "ids": ids, "masks": masks})
 
         return outputs, gt_instances
@@ -266,7 +288,7 @@ class VideoMaskFormer_frame(nn.Module):
 
         cur_embds = cur_embds / cur_embds.norm(dim=1)[:, None]
         tgt_embds = tgt_embds / tgt_embds.norm(dim=1)[:, None]
-        cos_sim = torch.mm(cur_embds, tgt_embds.transpose(0,1))
+        cos_sim = torch.mm(cur_embds, tgt_embds.transpose(0, 1))
 
         cost_embd = 1 - cos_sim
 
@@ -279,13 +301,17 @@ class VideoMaskFormer_frame(nn.Module):
         return indices
 
     def post_processing(self, outputs):
-        pred_logits, pred_masks, pred_embds = outputs['pred_logits'], outputs['pred_masks'], outputs['pred_embds']
+        pred_logits, pred_masks, pred_embds = (
+            outputs["pred_logits"],
+            outputs["pred_masks"],
+            outputs["pred_embds"],
+        )
 
         # pred_logits: 1 t q c
         # pred_masks: 1 q t h w
         pred_logits = pred_logits[0]
-        pred_masks = einops.rearrange(pred_masks[0], 'q t h w -> t q h w')
-        pred_embds = einops.rearrange(pred_embds[0], 'c t q -> t q c')
+        pred_masks = einops.rearrange(pred_masks[0], "q t h w -> t q h w")
+        pred_embds = einops.rearrange(pred_embds[0], "c t q -> t q c")
 
         pred_logits = list(torch.unbind(pred_logits))
         pred_masks = list(torch.unbind(pred_masks))
@@ -305,15 +331,15 @@ class VideoMaskFormer_frame(nn.Module):
             out_masks.append(pred_masks[i][indices, :, :])
             out_embds.append(pred_embds[i][indices, :])
 
-        #out_logits = sum(out_logits)/len(out_logits)
-        #out_logits = out_logits.unsqueeze(0)
+        # out_logits = sum(out_logits)/len(out_logits)
+        # out_logits = out_logits.unsqueeze(0)
         out_logits = torch.stack(out_logits, 0)
 
         out_masks = torch.stack(out_masks, dim=1)  # q h w -> q t h w
         out_masks = out_masks.unsqueeze(0)
 
-        outputs['pred_logits'] = out_logits
-        outputs['pred_masks'] = out_masks
+        outputs["pred_logits"] = out_logits
+        outputs["pred_masks"] = out_masks
 
         return outputs
 
@@ -324,20 +350,29 @@ class VideoMaskFormer_frame(nn.Module):
         out_list = []
         for i in range(iters):
             start_idx = i * window_size
-            end_idx = (i+1) * window_size
+            end_idx = (i + 1) * window_size
 
             features = self.backbone(images_tensor[start_idx:end_idx])
             out = self.sem_seg_head(features)
-            del features['res2'], features['res3'], features['res4'], features['res5']
-            for j in range(len(out['aux_outputs'])):
-                del out['aux_outputs'][j]['pred_masks'], out['aux_outputs'][j]['pred_logits']
+            del features["res2"], features["res3"], features["res4"], features["res5"]
+            for j in range(len(out["aux_outputs"])):
+                del (
+                    out["aux_outputs"][j]["pred_masks"],
+                    out["aux_outputs"][j]["pred_logits"],
+                )
             out_list.append(out)
 
         # merge outputs
         outputs = {}
-        outputs['pred_logits'] = torch.cat([x['pred_logits'] for x in out_list], dim=1).detach()
-        outputs['pred_masks'] = torch.cat([x['pred_masks'] for x in out_list], dim=2).detach()
-        outputs['pred_embds'] = torch.cat([x['pred_embds'] for x in out_list], dim=2).detach()
+        outputs["pred_logits"] = torch.cat(
+            [x["pred_logits"] for x in out_list], dim=1
+        ).detach()
+        outputs["pred_masks"] = torch.cat(
+            [x["pred_masks"] for x in out_list], dim=2
+        ).detach()
+        outputs["pred_embds"] = torch.cat(
+            [x["pred_embds"] for x in out_list], dim=2
+        ).detach()
 
         return outputs
 
@@ -347,7 +382,9 @@ class VideoMaskFormer_frame(nn.Module):
         for targets_per_video in targets:
             _num_instance = len(targets_per_video["instances"][0])
             mask_shape = [_num_instance, self.num_frames, h_pad, w_pad]
-            gt_masks_per_video = torch.zeros(mask_shape, dtype=torch.bool, device=self.device)
+            gt_masks_per_video = torch.zeros(
+                mask_shape, dtype=torch.bool, device=self.device
+            )
 
             gt_ids_per_video = []
             for f_i, targets_per_frame in enumerate(targets_per_video["instances"]):
@@ -360,26 +397,43 @@ class VideoMaskFormer_frame(nn.Module):
             gt_ids_per_video = torch.cat(gt_ids_per_video, dim=1)
             valid_idx = (gt_ids_per_video != -1).any(dim=-1)
 
-            gt_classes_per_video = targets_per_frame.gt_classes[valid_idx]          # N,
-            gt_ids_per_video = gt_ids_per_video[valid_idx]                          # N, num_frames
+            gt_classes_per_video = targets_per_frame.gt_classes[valid_idx]  # N,
+            gt_ids_per_video = gt_ids_per_video[valid_idx]  # N, num_frames
 
-            gt_instances.append({"labels": gt_classes_per_video, "ids": gt_ids_per_video})
-            gt_masks_per_video = gt_masks_per_video[valid_idx].float()          # N, num_frames, H, W
+            gt_instances.append(
+                {"labels": gt_classes_per_video, "ids": gt_ids_per_video}
+            )
+            gt_masks_per_video = gt_masks_per_video[
+                valid_idx
+            ].float()  # N, num_frames, H, W
             gt_instances[-1].update({"masks": gt_masks_per_video})
 
         return gt_instances
 
-    def inference_video(self, pred_cls, pred_masks, img_size, output_height, output_width, first_resize_size):
+    def inference_video(
+        self,
+        pred_cls,
+        pred_masks,
+        img_size,
+        output_height,
+        output_width,
+        first_resize_size,
+    ):
         if len(pred_cls) > 0:
             scores = F.softmax(pred_cls.mean(0), dim=-1)[:, :-1]
-            pred_cls = F.softmax(pred_cls, dim=-1)[...,:-1]
-            labels = torch.arange(self.sem_seg_head.num_classes, device=self.device).unsqueeze(0).repeat(self.num_queries, 1).flatten(0, 1)
-            # keep top-1 predictions
-            scores_per_image, topk_indices = scores.flatten(0, 1).topk(1, sorted=False)
-            ## keep top-10 predictions
-            #scores_per_image, topk_indices = scores.flatten(0, 1).topk(10, sorted=False)
+            pred_cls = F.softmax(pred_cls, dim=-1)[..., :-1]
+            labels = (
+                torch.arange(self.sem_seg_head.num_classes, device=self.device)
+                .unsqueeze(0)
+                .repeat(self.num_queries, 1)
+                .flatten(0, 1)
+            )
+            ## keep top-1 predictions
+            # scores_per_image, topk_indices = scores.flatten(0, 1).topk(1, sorted=False)
+            # keep top-10 predictions
+            scores_per_image, topk_indices = scores.flatten(0, 1).topk(10, sorted=False)
             labels_per_image = labels[topk_indices]
-            scores_per_image = pred_cls.reshape(len(pred_cls),-1)[:,topk_indices]
+            scores_per_image = pred_cls.reshape(len(pred_cls), -1)[:, topk_indices]
 
             topk_indices = topk_indices // self.sem_seg_head.num_classes
             pred_masks = pred_masks[topk_indices]
@@ -390,10 +444,13 @@ class VideoMaskFormer_frame(nn.Module):
 
             pred_masks = pred_masks[:, :, : img_size[0], : img_size[1]]
             pred_masks = F.interpolate(
-                pred_masks, size=(output_height, output_width), mode="bilinear", align_corners=False
+                pred_masks,
+                size=(output_height, output_width),
+                mode="bilinear",
+                align_corners=False,
             )
 
-            masks = pred_masks > 0.
+            masks = pred_masks > 0.0
 
             out_scores = scores_per_image.tolist()
             out_labels = labels_per_image.tolist()
@@ -403,6 +460,7 @@ class VideoMaskFormer_frame(nn.Module):
             out_labels = []
             out_masks = []
 
+        out_masks = torch.stack(out_masks, dim=0)
         video_output = {
             "image_size": (output_height, output_width),
             "pred_scores": out_scores,

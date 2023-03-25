@@ -10,19 +10,17 @@ import argparse
 import glob
 import multiprocessing as mp
 import os
+import pdb
+import cv2
 
 # fmt: off
 import sys
 sys.path.insert(1, os.path.join(sys.path[0], '..'))
 # fmt: on
 
-import cv2
-import tempfile
 import time
-import warnings
 
 import numpy as np
-import tqdm
 
 from torch.cuda.amp import autocast
 
@@ -36,8 +34,6 @@ from mask2former_video import add_maskformer2_video_config
 from minvis import add_minvis_config
 from predictor import VisualizationDemo
 
-import shutil
-
 
 def setup_cfg(args):
     # load config from file and command-line arguments
@@ -50,6 +46,7 @@ def setup_cfg(args):
     cfg.merge_from_list(args.opts)
     cfg.freeze()
     return cfg
+
 
 def get_parser():
     parser = argparse.ArgumentParser(description="maskformer2 demo for builtin configs")
@@ -83,12 +80,13 @@ def get_parser():
     )
     return parser
 
+
 if __name__ == "__main__":
     mp.set_start_method("spawn", force=True)
     args = get_parser().parse_args()
     setup_logger(name="fvcore")
-    logger = setup_logger()
-    logger.info("Arguments: " + str(args))
+    # logger = setup_logger()
+    # logger.info("Arguments: " + str(args))
 
     cfg = setup_cfg(args)
 
@@ -100,9 +98,9 @@ if __name__ == "__main__":
     output_root = args.output
 
     os.makedirs(output_root, exist_ok=True)
-    
+
     frames_path = video_root
-    frames_path = glob.glob(os.path.expanduser(os.path.join(frames_path, '*.jpg')))
+    frames_path = glob.glob(os.path.expanduser(os.path.join(frames_path, "*.jpg")))
     frames_path.sort()
 
     vid_frames = []
@@ -113,20 +111,25 @@ if __name__ == "__main__":
     start_time = time.time()
     with autocast():
         predictions, visualized_output = demo.run_on_video(vid_frames)
-    logger.info(
+    print(
         "detected {} instances per frame in {:.2f}s".format(
             len(predictions["pred_scores"]), time.time() - start_time
         )
     )
 
     # save frames
-    for path, _vis_output, mask, score in zip(frames_path, visualized_output, \
-                                predictions['pred_masks'][0], predictions['pred_scores']):
-        out_filename = os.path.join(output_root, os.path.basename(path))
-        _vis_output.save(out_filename)
-        mask = mask.cpu().numpy().astype(np.uint8)*128
-        if score[0]<0.9:
+    for path, _vis_output, mask, score in zip(
+        frames_path,
+        visualized_output,
+        predictions["pred_masks"].permute(1, 0, 2, 3),  # T, K, H, W
+        predictions["pred_scores"],
+    ):
+        # _vis_output.save(out_filename)
+        mask = mask.numpy() * (np.asarray(score)[:, None, None] > 0.9)
+        mask = mask.sum(0).astype(np.int8) * 127
+        if mask.sum() == 0:
             mask[:] = -1
-        np.save(out_filename.replace('.jpg', '.npy'), mask.astype(np.int8))
-        #cv2.imwrite(out_filename.replace('.jpg', '.png'), mask)
 
+        out_filename = os.path.join(output_root, os.path.basename(path))
+        cv2.imwrite(out_filename, mask)
+        np.save(out_filename.replace(".jpg", ".npy"), mask)
