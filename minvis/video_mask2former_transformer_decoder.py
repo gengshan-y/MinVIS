@@ -22,7 +22,7 @@ from mask2former.modeling.transformer_decoder.position_encoding import (
 from mask2former_video.modeling.transformer_decoder.video_mask2former_transformer_decoder import (
     VideoMultiScaleMaskedTransformerDecoder,
 )
-import torch.einops as einops
+import einops
 
 
 @TRANSFORMER_DECODER_REGISTRY.register()
