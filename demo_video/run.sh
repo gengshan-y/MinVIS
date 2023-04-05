@@ -1,4 +1,4 @@
-# bash run.sh ../../../../database/DAVIS/JPEGImages/Full-Resolution/2023-03-24-16-20-03-cat-pikachu-0000/
+# bash run.sh ../../../../database/processed/JPEGImages/Full-Resolution/2023-03-24-16-20-03-cat-pikachu-0000/
 
 input=$1
 rm output -rf

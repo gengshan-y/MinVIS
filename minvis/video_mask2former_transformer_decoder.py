@@ -12,16 +12,23 @@ from torch.nn import functional as F
 
 from detectron2.config import configurable
 
-from mask2former.modeling.transformer_decoder.maskformer_transformer_decoder import TRANSFORMER_DECODER_REGISTRY
-from mask2former.modeling.transformer_decoder.position_encoding import PositionEmbeddingSine
+from mask2former.modeling.transformer_decoder.maskformer_transformer_decoder import (
+    TRANSFORMER_DECODER_REGISTRY,
+)
+from mask2former.modeling.transformer_decoder.position_encoding import (
+    PositionEmbeddingSine,
+)
 
-from mask2former_video.modeling.transformer_decoder.video_mask2former_transformer_decoder import VideoMultiScaleMaskedTransformerDecoder
-import einops
+from mask2former_video.modeling.transformer_decoder.video_mask2former_transformer_decoder import (
+    VideoMultiScaleMaskedTransformerDecoder,
+)
+import torch.einops as einops
 
 
 @TRANSFORMER_DECODER_REGISTRY.register()
-class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransformerDecoder):
-
+class VideoMultiScaleMaskedTransformerDecoder_frame(
+    VideoMultiScaleMaskedTransformerDecoder
+):
     @configurable
     def __init__(
         self,
@@ -41,7 +48,7 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         num_frames,
     ):
         super().__init__(
-            in_channels=in_channels, 
+            in_channels=in_channels,
             mask_classification=mask_classification,
             num_classes=num_classes,
             hidden_dim=hidden_dim,
@@ -59,7 +66,7 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         N_steps = hidden_dim // 2
         self.pe_layer = PositionEmbeddingSine(N_steps, normalize=True)
 
-    def forward(self, x, mask_features, mask = None):
+    def forward(self, x, mask_features, mask=None):
         # x is a list of multi-scale feature
         assert len(x) == self.num_feature_levels
         src = []
@@ -72,7 +79,10 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         for i in range(self.num_feature_levels):
             size_list.append(x[i].shape[-2:])
             pos.append(self.pe_layer(x[i], None).flatten(2))
-            src.append(self.input_proj[i](x[i]).flatten(2) + self.level_embed.weight[i][None, :, None])
+            src.append(
+                self.input_proj[i](x[i]).flatten(2)
+                + self.level_embed.weight[i][None, :, None]
+            )
 
             # flatten NxCxHxW to HWxNxC
             pos[-1] = pos[-1].permute(2, 0, 1)
@@ -88,7 +98,9 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
         predictions_mask = []
 
         # prediction heads on learnable query features
-        outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[0])
+        outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(
+            output, mask_features, attn_mask_target_size=size_list[0]
+        )
         predictions_class.append(outputs_class)
         predictions_mask.append(outputs_mask)
 
@@ -97,51 +109,58 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
             attn_mask[torch.where(attn_mask.sum(-1) == attn_mask.shape[-1])] = False
             # attention: cross-attention first
             output = self.transformer_cross_attention_layers[i](
-                output, src[level_index],
+                output,
+                src[level_index],
                 memory_mask=attn_mask,
                 memory_key_padding_mask=None,  # here we do not apply masking on padded region
-                pos=pos[level_index], query_pos=query_embed
+                pos=pos[level_index],
+                query_pos=query_embed,
             )
 
             output = self.transformer_self_attention_layers[i](
-                output, tgt_mask=None,
-                tgt_key_padding_mask=None,
-                query_pos=query_embed
-            )
-            
-            # FFN
-            output = self.transformer_ffn_layers[i](
-                output
+                output, tgt_mask=None, tgt_key_padding_mask=None, query_pos=query_embed
             )
 
-            outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(output, mask_features, attn_mask_target_size=size_list[(i + 1) % self.num_feature_levels])
+            # FFN
+            output = self.transformer_ffn_layers[i](output)
+
+            outputs_class, outputs_mask, attn_mask = self.forward_prediction_heads(
+                output,
+                mask_features,
+                attn_mask_target_size=size_list[(i + 1) % self.num_feature_levels],
+            )
             predictions_class.append(outputs_class)
             predictions_mask.append(outputs_mask)
 
         assert len(predictions_class) == self.num_layers + 1
 
-        # expand BT to B, T  
+        # expand BT to B, T
         bt = predictions_mask[-1].shape[0]
         bs = bt // self.num_frames if self.training else 1
         t = bt // bs
         for i in range(len(predictions_mask)):
-            predictions_mask[i] = einops.rearrange(predictions_mask[i], '(b t) q h w -> b q t h w', t=t)
+            predictions_mask[i] = einops.rearrange(
+                predictions_mask[i], "(b t) q h w -> b q t h w", t=t
+            )
 
         for i in range(len(predictions_class)):
-            predictions_class[i] = einops.rearrange(predictions_class[i], '(b t) q c -> b t q c', t=t)
+            predictions_class[i] = einops.rearrange(
+                predictions_class[i], "(b t) q c -> b t q c", t=t
+            )
 
         pred_embds = self.decoder_norm(output)
-        pred_embds = einops.rearrange(pred_embds, 'q (b t) c -> b c t q', t=t)
+        pred_embds = einops.rearrange(pred_embds, "q (b t) c -> b c t q", t=t)
 
         out = {
-            'pred_logits': predictions_class[-1],
-            'pred_masks': predictions_mask[-1],
-            'aux_outputs': self._set_aux_loss(
-                predictions_class if self.mask_classification else None, predictions_mask
+            "pred_logits": predictions_class[-1],
+            "pred_masks": predictions_mask[-1],
+            "aux_outputs": self._set_aux_loss(
+                predictions_class if self.mask_classification else None,
+                predictions_mask,
             ),
-            'pred_embds': pred_embds,
+            "pred_embds": pred_embds,
         }
-        
+
         return out
 
     def forward_prediction_heads(self, output, mask_features, attn_mask_target_size):
@@ -153,10 +172,22 @@ class VideoMultiScaleMaskedTransformerDecoder_frame(VideoMultiScaleMaskedTransfo
 
         # NOTE: prediction is of higher-resolution
         # [B, Q, H, W] -> [B, Q, H*W] -> [B, h, Q, H*W] -> [B*h, Q, HW]
-        attn_mask = F.interpolate(outputs_mask, size=attn_mask_target_size, mode="bilinear", align_corners=False)
+        attn_mask = F.interpolate(
+            outputs_mask,
+            size=attn_mask_target_size,
+            mode="bilinear",
+            align_corners=False,
+        )
         # must use bool type
         # If a BoolTensor is provided, positions with ``True`` are not allowed to attend while ``False`` values will be unchanged.
-        attn_mask = (attn_mask.sigmoid().flatten(2).unsqueeze(1).repeat(1, self.num_heads, 1, 1).flatten(0, 1) < 0.5).bool()
+        attn_mask = (
+            attn_mask.sigmoid()
+            .flatten(2)
+            .unsqueeze(1)
+            .repeat(1, self.num_heads, 1, 1)
+            .flatten(0, 1)
+            < 0.5
+        ).bool()
         attn_mask = attn_mask.detach()
 
         return outputs_class, outputs_mask, attn_mask

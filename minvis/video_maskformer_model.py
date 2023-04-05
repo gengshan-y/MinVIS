@@ -8,7 +8,7 @@
 import logging
 import math
 from typing import Tuple
-import einops
+import torch.einops as einops
 
 import torch
 from torch import nn

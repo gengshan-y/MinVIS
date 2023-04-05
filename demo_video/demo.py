@@ -16,6 +16,11 @@ import cv2
 # fmt: off
 import sys
 sys.path.insert(1, os.path.join(sys.path[0], '..'))
+sys.path.insert(
+    0,
+    "%s/../../../../"
+    % os.path.join(os.path.dirname(__file__)),
+)
 # fmt: on
 
 import time
