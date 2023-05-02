@@ -104,9 +104,13 @@ def extract_tracks(seqname, outdir):
         predictions["pred_masks"].permute(1, 0, 2, 3),  # T, K, H, W
         predictions["pred_scores"],
     ):
-        # _vis_output.save(out_filename)
-        mask = mask.numpy() * (np.asarray(score)[:, None, None] > 0.9)
-        mask = mask.sum(0).astype(np.int8) * 127
+        # # assuming single object
+        # mask = mask.numpy() * (np.asarray(score)[:, None, None] > 0.9)
+        # mask = mask.sum(0).astype(np.int8) * 127
+
+        # best hypothesis
+        mask = mask[np.asarray(score).argmax(0)].numpy().astype(np.int8) * 127
+
         if mask.sum() == 0:
             mask[:] = -1
 
