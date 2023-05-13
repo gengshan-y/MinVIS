@@ -1,4 +1,5 @@
 # modified by Gengshan Yang
+# python preprocess/third_party/MinVIS/extract_tracks.py cat-pikachu-0-0000 database/processed/ quad
 
 # Copyright (c) 2021-2022, NVIDIA Corporation & Affiliates. All rights reserved.
 #
@@ -64,7 +65,14 @@ def setup_cfg():
     return cfg
 
 
-def extract_tracks(seqname, outdir):
+def extract_tracks(seqname, outdir, obj_class):
+    if obj_class == "human":
+        is_human = 1  
+    elif obj_class == "quad":
+        is_human = 0
+    else:
+        raise NotImplementedError
+
     mp.set_start_method("spawn", force=True)
     setup_logger(name="fvcore")
     # logger = setup_logger()
@@ -98,6 +106,9 @@ def extract_tracks(seqname, outdir):
     )
 
     # save frames
+    label = predictions["pred_labels"]
+    pred_is_human = np.asarray(label)==0
+    invalid_idx = pred_is_human!=is_human
     for path, _vis_output, mask, score in zip(
         frames_path,
         visualized_output,
@@ -108,8 +119,12 @@ def extract_tracks(seqname, outdir):
         # mask = mask.numpy() * (np.asarray(score)[:, None, None] > 0.9)
         # mask = mask.sum(0).astype(np.int8) * 127
 
+        score = np.asarray(score)
+        score[invalid_idx] = 0
+        if score.sum() == 0:
+            print("Warning: no valid mask")
         # best hypothesis
-        mask = mask[np.asarray(score).argmax(0)].numpy().astype(np.int8) * 127
+        mask = mask[score.argmax(0)].numpy().astype(np.int8) * 127
 
         if mask.sum() == 0:
             mask[:] = -1
@@ -128,4 +143,5 @@ def extract_tracks(seqname, outdir):
 if __name__ == "__main__":
     seqname = sys.argv[1]
     outdir = sys.argv[2]
-    extract_tracks(seqname, outdir)
+    obj_class = sys.argv[3]
+    extract_tracks(seqname, outdir, obj_class)
