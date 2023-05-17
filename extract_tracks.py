@@ -49,10 +49,12 @@ from predictor import VisualizationDemo
 
 def setup_cfg():
     # load config from file and command-line arguments
-    config_file = "preprocess/third_party/MinVIS/configs/ovis/swin/video_maskformer2_swin_large_IN21k_384_bs32_8ep_frame.yaml"
+    #config_file = "preprocess/third_party/MinVIS/configs/ovis/swin/video_maskformer2_swin_large_IN21k_384_bs32_8ep_frame.yaml"
+    config_file = "preprocess/third_party/MinVIS/configs/youtubevis_2021/swin/video_maskformer2_swin_large_IN21k_384_bs32_8ep_frame.yaml"
     opts = [
         "MODEL.WEIGHTS",
-        "preprocess/third_party/MinVIS/demo_video/minvis_ovis_swin_large.pth",
+        "preprocess/third_party/MinVIS/demo_video/minvis_ytvis21_swin_large.pth",
+        #"preprocess/third_party/MinVIS/demo_video/minvis_ovis_swin_large.pth",
     ]
     cfg = get_cfg()
     add_deeplab_config(cfg)
@@ -115,16 +117,17 @@ def extract_tracks(seqname, outdir, obj_class):
         predictions["pred_masks"].permute(1, 0, 2, 3),  # T, K, H, W
         predictions["pred_scores"],
     ):
-        # # assuming single object
-        # mask = mask.numpy() * (np.asarray(score)[:, None, None] > 0.9)
-        # mask = mask.sum(0).astype(np.int8) * 127
-
         score = np.asarray(score)
         score[invalid_idx] = 0
         if score.sum() == 0:
             print("Warning: no valid mask")
-        # best hypothesis
-        mask = mask[score.argmax(0)].numpy().astype(np.int8) * 127
+
+        # assuming single object
+        mask = mask.numpy() * (score[:, None, None] > 0.9)
+        mask = mask.sum(0).astype(np.int8) * 127
+
+        # # best hypothesis
+        # mask = mask[score.argmax(0)].numpy().astype(np.int8) * 127
 
         if mask.sum() == 0:
             mask[:] = -1

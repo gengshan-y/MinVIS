@@ -256,6 +256,8 @@ class VideoMaskFormer(nn.Module):
         if len(pred_cls) > 0:
             scores = F.softmax(pred_cls, dim=-1)[:, :-1]
             labels = torch.arange(self.sem_seg_head.num_classes, device=self.device).unsqueeze(0).repeat(self.num_queries, 1).flatten(0, 1)
+            ## keep top-1 prediction
+            #scores_per_image, topk_indices = scores.flatten(0, 1).topk(1, sorted=False)
             # keep top-10 predictions
             scores_per_image, topk_indices = scores.flatten(0, 1).topk(10, sorted=False)
             labels_per_image = labels[topk_indices]
