@@ -109,25 +109,36 @@ def extract_tracks(seqname, outdir, obj_class):
 
     # save frames
     label = predictions["pred_labels"]
-    pred_is_human = np.asarray(label)==0
+    pred_is_human = np.asarray(label)==25 # in occvis, human=0; in ytvis, human=25
+    # class label for youtubevis/ytvis
+    # person: 25
+    # cat: 5
+    # dog: 8
     invalid_idx = pred_is_human!=is_human
+
+    # best hypothesis
+    scores = np.asarray(predictions["pred_scores"])
+    scores[..., invalid_idx] = 0
+    if scores.sum() == 0:
+            print("Warning: no valid mask")
+    best_idx = scores.sum(0).argmax(0)
     for path, _vis_output, mask, score in zip(
         frames_path,
         visualized_output,
         predictions["pred_masks"].permute(1, 0, 2, 3),  # T, K, H, W
         predictions["pred_scores"],
     ):
-        score = np.asarray(score)
-        score[invalid_idx] = 0
-        if score.sum() == 0:
-            print("Warning: no valid mask")
+        # # assuming single object
+        # score = np.asarray(score)
+        # score[invalid_idx] = 0
+        # if score.sum() == 0:
+        #     print("Warning: no valid mask")
 
-        # assuming single object
-        mask = mask.numpy() * (score[:, None, None] > 0.9)
-        mask = mask.sum(0).astype(np.int8) * 127
+        # mask = mask.numpy() * (score[:, None, None] > 0.9)
+        # mask = mask.sum(0).astype(np.int8) * 127
 
-        # # best hypothesis
-        # mask = mask[score.argmax(0)].numpy().astype(np.int8) * 127
+        # best hypothesis
+        mask = mask[best_idx].numpy().astype(np.int8) * 127
 
         if mask.sum() == 0:
             mask[:] = -1
