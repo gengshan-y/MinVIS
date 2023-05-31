@@ -49,12 +49,12 @@ from predictor import VisualizationDemo
 
 def setup_cfg():
     # load config from file and command-line arguments
-    #config_file = "preprocess/third_party/MinVIS/configs/ovis/swin/video_maskformer2_swin_large_IN21k_384_bs32_8ep_frame.yaml"
+    # config_file = "preprocess/third_party/MinVIS/configs/ovis/swin/video_maskformer2_swin_large_IN21k_384_bs32_8ep_frame.yaml"
     config_file = "preprocess/third_party/MinVIS/configs/youtubevis_2021/swin/video_maskformer2_swin_large_IN21k_384_bs32_8ep_frame.yaml"
     opts = [
         "MODEL.WEIGHTS",
         "preprocess/third_party/MinVIS/demo_video/minvis_ytvis21_swin_large.pth",
-        #"preprocess/third_party/MinVIS/demo_video/minvis_ovis_swin_large.pth",
+        # "preprocess/third_party/MinVIS/demo_video/minvis_ovis_swin_large.pth",
     ]
     cfg = get_cfg()
     add_deeplab_config(cfg)
@@ -69,7 +69,7 @@ def setup_cfg():
 
 def extract_tracks(seqname, outdir, obj_class):
     if obj_class == "human":
-        is_human = 1  
+        is_human = 1
     elif obj_class == "quad":
         is_human = 0
     else:
@@ -109,18 +109,18 @@ def extract_tracks(seqname, outdir, obj_class):
 
     # save frames
     label = predictions["pred_labels"]
-    pred_is_human = np.asarray(label)==25 # in occvis, human=0; in ytvis, human=25
+    pred_is_human = np.asarray(label) == 25  # in occvis, human=0; in ytvis, human=25
     # class label for youtubevis/ytvis
     # person: 25
     # cat: 5
     # dog: 8
-    invalid_idx = pred_is_human!=is_human
+    invalid_idx = pred_is_human != is_human
 
     # best hypothesis
     scores = np.asarray(predictions["pred_scores"])
     scores[..., invalid_idx] = 0
     if scores.sum() == 0:
-            print("Warning: no valid mask")
+        print("Warning: no valid mask")
     best_idx = scores.sum(0).argmax(0)
     for path, _vis_output, mask, score in zip(
         frames_path,
@@ -140,7 +140,7 @@ def extract_tracks(seqname, outdir, obj_class):
         # best hypothesis
         mask = mask[best_idx].numpy().astype(np.int8) * 127
 
-        if mask.sum() == 0:
+        if mask.sum() == 0 or score[best_idx] < 0.8:
             mask[:] = -1
 
         out_filename = os.path.join(output_root, os.path.basename(path))
