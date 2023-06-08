@@ -148,10 +148,10 @@ def extract_tracks(seqname, outdir, obj_class):
         np.save(out_filename.replace(".jpg", ".npy"), mask)
 
     # save video
-    cmd = f'cat {output_root}/*.jpg | ffmpeg -y -f image2pipe -i - -vf "scale=-1:360" -loglevel panic {output_root}/vis.mp4'
+    cmd = f'ffmpeg -y -f image2 -pattern_type glob -i "{output_root}/*.jpg" -vf "scale=-1:360" -loglevel panic {output_root}/vis.mp4'
     subprocess.run(cmd, shell=True, check=True)
 
-    print("minvis done: ", seqname)
+    print("minvis saved to %s" % output_root)
 
 
 if __name__ == "__main__":
