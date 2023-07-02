@@ -101,11 +101,6 @@ def extract_tracks(seqname, outdir, obj_class):
     start_time = time.time()
     with autocast():
         predictions, visualized_output = demo.run_on_video(vid_frames)
-    print(
-        "detected {} instances per frame in {:.2f}s".format(
-            len(predictions["pred_scores"]), time.time() - start_time
-        )
-    )
 
     # save frames
     label = predictions["pred_labels"]
@@ -120,8 +115,15 @@ def extract_tracks(seqname, outdir, obj_class):
     scores = np.asarray(predictions["pred_scores"])
     scores[..., invalid_idx] = 0
     if scores.sum() == 0:
-        print("Warning: no valid mask")
-    best_idx = scores.sum(0).argmax(0)
+        print("Warning: object not detected, mask set to -1")
+    best_idx = scores.mean(0).argmax(0)
+    max_score = scores.mean(0).max(0)
+
+    print(
+        "finished in %.2fs, max detection confidence: %.2f"
+        % (time.time() - start_time, max_score)
+    )
+
     for path, _vis_output, mask, score in zip(
         frames_path,
         visualized_output,
